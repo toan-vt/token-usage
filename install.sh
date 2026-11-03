@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install the Claude Code token-usage uploader on this machine.
 #   curl -fsSL https://raw.githubusercontent.com/toan-vt/token-usage/main/install.sh | bash -s -- <machine-name>
+# Non-interactive: TU_TOKEN= (empty: use gh / git credentials / SSH key), TU_TRANSPORT=git (force SSH push)
 set -euo pipefail
 
 REPO="toan-vt/token-usage"
@@ -30,14 +31,18 @@ if [ -z "$TOKEN" ] && [ -z "${TU_TOKEN+x}" ]; then
   if command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
     echo "gh is logged in here, so you can leave the token blank."
   fi
-  read -r -s -p "GitHub token for $REPO (leave blank to use gh / git credentials): " TOKEN </dev/tty; echo
+  read -r -s -p "GitHub token for $REPO (leave blank to use gh / git credentials / SSH key): " TOKEN </dev/tty; echo
 fi
 
 umask 077
-python3 - "$DIR/config.json" "$REPO" "$HOST" "$TOKEN" <<'EOF'
-import json, sys
-path, repo, host, token = sys.argv[1:]
-json.dump({"repo": repo, "host": host, "token": token}, open(path, "w"), indent=2)
+python3 - "$DIR/config.json" "$REPO" "$HOST" "$TOKEN" "${TU_TRANSPORT:-}" <<'EOF'
+import json, os, sys
+path, repo, host, token, transport = sys.argv[1:]
+cfg = json.load(open(path)) if os.path.exists(path) else {}
+cfg.update({"repo": repo, "host": host, "token": token})
+if transport:
+    cfg["transport"] = transport   # "git" = push over SSH, "api" = GitHub API with a token
+json.dump(cfg, open(path, "w"), indent=2)
 EOF
 
 python3 - "$SETTINGS" "$DIR/push_usage.py" <<'EOF'

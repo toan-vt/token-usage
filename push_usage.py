@@ -15,6 +15,9 @@ Config: ~/.claude/token-usage/config.json
   {"repo": "toan-vt/token-usage", "host": "mac", "token": "github_pat_..."}
   If "token" is empty: $GITHUB_TOKEN, then `gh auth token`, then git's stored
   credentials for github.com (`git credential fill`) are used.
+  If no token is found at all, it pushes with git over SSH (your SSH key) using a
+  private shallow clone in ~/.claude/token-usage/repo.
+  Optional: "transport": "api" | "git" to force one; "git_url" to override the remote.
 
 Works with Python 3.6+ and the standard library only.
 """
@@ -129,27 +132,83 @@ def gh_request(cfg, method, path, body=None):
         raise RuntimeError("GitHub %s %s -> %s %s" % (method, path, e.code, e.read()[:300]))
 
 
-def upload(cfg, hours):
+def merged_doc(cfg, old, hours):
+    """New file content (bytes), or None when nothing changed.
+
+    Keeps older hours the local logs no longer have (Claude Code prunes old transcripts).
+    """
+    earliest = min(hours) if hours else "9999"
+    merged = {h: v for h, v in old.items() if h < earliest}
+    merged.update(hours)
+    if merged == old:
+        return None, len(merged)
+    doc = {"host": cfg["host"], "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+           "hours": {h: merged[h] for h in sorted(merged)}}
+    return json.dumps(doc, separators=(",", ":")).encode(), len(merged)
+
+
+def upload_api(cfg, hours):
     path = "data/hosts/%s.json" % cfg["host"]
     remote = gh_request(cfg, "GET", path)
     sha, old = None, {}
     if remote:
         sha = remote["sha"]
         old = json.loads(base64.b64decode(remote["content"]).decode()).get("hours", {})
-    # Keep older hours the local logs no longer have (Claude Code prunes old transcripts).
-    earliest = min(hours) if hours else "9999"
-    merged = {h: v for h, v in old.items() if h < earliest}
-    merged.update(hours)
-    if merged == old:
+    content, n = merged_doc(cfg, old, hours)
+    if content is None:
         return "unchanged"
-    doc = {"host": cfg["host"], "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-           "hours": {h: merged[h] for h in sorted(merged)}}
-    content = json.dumps(doc, separators=(",", ":")).encode()
     body = {"message": "usage: %s" % cfg["host"], "content": base64.b64encode(content).decode()}
     if sha:
         body["sha"] = sha
     gh_request(cfg, "PUT", path, body)
-    return "uploaded %d hours" % len(merged)
+    return "uploaded %d hours (api)" % n
+
+
+def git(args, cwd=None):
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0",
+               GIT_SSH_COMMAND=os.environ.get("GIT_SSH_COMMAND", "ssh -o BatchMode=yes -o ConnectTimeout=20"))
+    p = subprocess.run(["git"] + args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    if p.returncode != 0:
+        raise RuntimeError("git %s failed: %s" % (args[0], p.stderr.decode(errors="ignore").strip()[-300:]))
+    return p.stdout.decode(errors="ignore")
+
+
+def upload_git(cfg, hours):
+    """Push via git (SSH keys work). Uses a private shallow clone in ~/.claude/token-usage/repo."""
+    repo = os.path.join(APP_DIR, "repo")
+    url = cfg.get("git_url") or "git@github.com:%s.git" % cfg["repo"]
+    if not os.path.isdir(os.path.join(repo, ".git")):
+        git(["clone", "--quiet", "--depth", "1", "--branch", "main", url, repo])
+    path = os.path.join(repo, "data", "hosts", "%s.json" % cfg["host"])
+    ident = ["-c", "user.name=token-usage (%s)" % cfg["host"], "-c", "user.email=token-usage@users.noreply.github.com"]
+    for attempt in range(4):  # another machine may push in between; its files never overlap ours
+        git(["fetch", "--quiet", "--depth", "1", "origin", "main"], cwd=repo)
+        git(["reset", "--quiet", "--hard", "FETCH_HEAD"], cwd=repo)
+        old = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                old = json.load(f).get("hours", {})
+        content, n = merged_doc(cfg, old, hours)
+        if content is None:
+            return "unchanged"
+        if not os.path.isdir(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as f:
+            f.write(content)
+        git(["add", path], cwd=repo)
+        git(ident + ["commit", "--quiet", "-m", "usage: %s" % cfg["host"]], cwd=repo)
+        try:
+            git(["push", "--quiet", "origin", "HEAD:main"], cwd=repo)
+            return "uploaded %d hours (git)" % n
+        except RuntimeError:
+            if attempt == 3:
+                raise
+            time.sleep(2 + attempt * 3)
+
+
+def upload(cfg, hours):
+    transport = cfg.get("transport") or ("api" if cfg["token"] else "git")
+    return upload_git(cfg, hours) if transport == "git" else upload_api(cfg, hours)
 
 
 def run():
@@ -164,8 +223,6 @@ def run():
         return "another upload is running"
     try:
         cfg = load_config()
-        if not cfg["token"]:
-            return "no GitHub token configured in %s" % CONFIG
         hours, n = compute_hours()
         return "%d messages; %s" % (n, upload(cfg, hours))
     finally:
