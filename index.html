@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code Tokens</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #fcfcfb;
+    --card: #ffffff;
+    --border: #e6e5e0;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --text-3: #7a7974;
+    --grid: #ecebe7;
+    --l0: #ebeae6;
+    --l1: #b7d3f6;
+    --l2: #6da7ec;
+    --l3: #2a78d6;
+    --l4: #184f95;
+    --bar: #2a78d6;
+    --bar-today: #86b6ef;
+    --outline: #0b0b0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #1a1a19; --card: #222220; --border: #34332f;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2e2d2a;
+      --l0: #2b2a27; --l1: #104281; --l2: #256abf; --l3: #3987e5; --l4: #86b6ef;
+      --bar: #3987e5; --bar-today: #1c5cab; --outline: #f0efec;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1a1a19; --card: #222220; --border: #34332f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2e2d2a;
+    --l0: #2b2a27; --l1: #104281; --l2: #256abf; --l3: #3987e5; --l4: #86b6ef;
+    --bar: #3987e5; --bar-today: #1c5cab; --outline: #f0efec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--text-3); font-size: 13px; margin: 0 0 24px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat .k { color: var(--text-2); font-size: 12px; }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .n { color: var(--text-3); font-size: 12px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+  .scroll { overflow-x: auto; }
+  svg text { fill: var(--text-3); font-size: 10px; }
+  .cell { rx: 2; }
+  .cell:hover, .bar:hover { stroke: var(--outline); stroke-width: 1; }
+  .legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; color: var(--text-3); font-size: 11px; margin-top: 8px; }
+  .legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    font-variant-numeric: tabular-nums; min-width: 160px;
+  }
+  #tip b { display: block; margin-bottom: 4px; }
+  #tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--text-2); }
+  details { margin-top: 12px; color: var(--text-2); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 12px; margin-top: 8px; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  .empty { color: var(--text-3); padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Claude Code token usage</h1>
+  <p class="sub" id="sub">Loading…</p>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Today so far</div><div class="v" id="s-today">–</div><div class="n" id="s-today-n">&nbsp;</div></div>
+    <div class="stat"><div class="k">Last 30 days</div><div class="v" id="s-30">–</div><div class="n" id="s-30-n">&nbsp;</div></div>
+    <div class="stat"><div class="k">This year</div><div class="v" id="s-year">–</div><div class="n" id="s-year-n">&nbsp;</div></div>
+    <div class="stat"><div class="k">Current streak</div><div class="v" id="s-streak">–</div><div class="n" id="s-streak-n">&nbsp;</div></div>
+  </div>
+
+  <section>
+    <h2>Daily tokens, last 12 months</h2>
+    <div class="scroll" id="cal-wrap"></div>
+    <div class="legend">Less <i style="background:var(--l0)"></i><i style="background:var(--l1)"></i><i style="background:var(--l2)"></i><i style="background:var(--l3)"></i><i style="background:var(--l4)"></i> More</div>
+  </section>
+
+  <section>
+    <h2>Last 30 days</h2>
+    <div id="bars"></div>
+    <details>
+      <summary>Show as table</summary>
+      <div id="table"></div>
+    </details>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const TZ = "America/New_York";
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+const full = new Intl.NumberFormat("en");
+const KEYS = [["input", "Input"], ["output", "Output"], ["cache_write", "Cache write"], ["cache_read", "Cache read"]];
+
+const ymd = d => d.toISOString().slice(0, 10);
+const parse = s => new Date(s + "T00:00:00Z");
+const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+const fmtDate = s => parse(s).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" });
+const total = r => r ? KEYS.reduce((a, [k]) => a + (+r[k] || 0), 0) : 0;
+const el = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+async function fetchText(url) {
+  try { const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" }); return r.ok ? r.text() : null; }
+  catch { return null; }
+}
+
+async function load() {
+  const [csv, todayTxt] = await Promise.all([fetchText("data/history.csv"), fetchText("data/today.json")]);
+  const days = new Map();
+  if (csv) {
+    const [head, ...lines] = csv.trim().split("\n");
+    const cols = head.split(",");
+    for (const line of lines) {
+      const v = line.split(","); const r = {};
+      cols.forEach((c, i) => r[c] = c === "date" ? v[i] : +v[i]);
+      days.set(r.date, r);
+    }
+  }
+  let today = null;
+  if (todayTxt) { try { today = JSON.parse(todayTxt); days.set(today.date, { ...today, partial: true }); } catch {} }
+  render(days, today);
+}
+
+/* --- tooltip --- */
+const tip = document.getElementById("tip");
+function showTip(ev, date, r) {
+  let html = `<b>${fmtDate(date)}${r && r.partial ? " · so far" : ""}</b>`;
+  if (!r) html += `<div class="row">No data</div>`;
+  else {
+    html += `<div class="row"><span>Total</span><span>${full.format(total(r))}</span></div>`;
+    for (const [k, label] of KEYS) html += `<div class="row"><span>${label}</span><span>${full.format(r[k] || 0)}</span></div>`;
+    if (r.partial && r.updated_at) html += `<div class="row"><span>Updated</span><span>${r.updated_at.slice(11, 16)} ET</span></div>`;
+  }
+  tip.innerHTML = html; tip.style.display = "block"; moveTip(ev);
+}
+function moveTip(ev) {
+  const pad = 12, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => tip.style.display = "none";
+function bindTip(node, date, r) {
+  node.addEventListener("mouseenter", e => showTip(e, date, r));
+  node.addEventListener("mousemove", moveTip);
+  node.addEventListener("mouseleave", hideTip);
+  node.addEventListener("click", e => showTip(e, date, r));
+}
+
+/* --- render --- */
+function render(days, today) {
+  const todayStr = today ? today.date : nyToday();
+  const end = parse(todayStr);
+
+  // Shade thresholds from the user's own non-zero days (quartiles), like GitHub.
+  const nz = [...days.values()].map(total).filter(v => v > 0).sort((a, b) => a - b);
+  const q = p => nz.length ? nz[Math.min(nz.length - 1, Math.floor(p * nz.length))] : Infinity;
+  const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+  const level = v => v <= 0 ? 0 : v < t1 ? 1 : v < t2 ? 2 : v < t3 ? 3 : 4;
+
+  // Stats
+  const sumRange = n => { let s = 0; for (let i = 0; i < n; i++) s += total(days.get(ymd(addDays(end, -i)))); return s; };
+  const year = todayStr.slice(0, 4);
+  let ys = 0, yd = 0;
+  for (const [d, r] of days) if (d.startsWith(year)) { ys += total(r); if (total(r) > 0) yd++; }
+  let streak = 0;
+  for (let i = total(days.get(todayStr)) > 0 ? 0 : 1; ; i++) { if (total(days.get(ymd(addDays(end, -i)))) > 0) streak++; else break; }
+  const tv = total(days.get(todayStr));
+  document.getElementById("s-today").textContent = compact.format(tv);
+  document.getElementById("s-today-n").textContent = today ? `through ${today.updated_at.slice(11, 16)} ET` : "no data yet";
+  document.getElementById("s-30").textContent = compact.format(sumRange(30));
+  document.getElementById("s-30-n").textContent = `avg ${compact.format(sumRange(30) / 30)}/day`;
+  document.getElementById("s-year").textContent = compact.format(ys);
+  document.getElementById("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"}`;
+  document.getElementById("s-streak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
+  document.getElementById("s-streak-n").textContent = nz.length ? `best day ${compact.format(nz[nz.length - 1])}` : " ";
+  document.getElementById("sub").textContent = days.size
+    ? `All machines combined · days in US Eastern time · refreshes every 30 min`
+    : `No data yet. It appears after the first successful snapshot from Grafana.`;
+
+  // Calendar: 53 columns (weeks, Sunday-first), ending with the current week.
+  const cell = 11, gap = 3, step = cell + gap, left = 28, top = 18;
+  const start = addDays(end, -(52 * 7 + end.getUTCDay()));
+  const weeks = 53;
+  const svg = el("svg", { width: left + weeks * step + 16, height: top + 7 * step, role: "img", "aria-label": "Daily token usage calendar" });
+  ["Mon", "Wed", "Fri"].forEach((n, i) => { const t = el("text", { x: 0, y: top + (1 + 2 * i) * step + 9 }); t.textContent = n; svg.append(t); });
+  let lastMonth = -1;
+  for (let w = 0; w < weeks; w++) {
+    const wk = addDays(start, w * 7);
+    if (wk.getUTCMonth() !== lastMonth && wk.getUTCDate() <= 7) {
+      lastMonth = wk.getUTCMonth();
+      const t = el("text", { x: left + w * step, y: 10 });
+      t.textContent = wk.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+      svg.append(t);
+    }
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(wk, d);
+      if (day > end) continue;
+      const ds = ymd(day), r = days.get(ds);
+      const rect = el("rect", { class: "cell", x: left + w * step, y: top + d * step, width: cell, height: cell,
+        fill: `var(--l${level(total(r))})` });
+      if (ds === todayStr) rect.setAttribute("style", "stroke:var(--outline);stroke-width:1.5");
+      bindTip(rect, ds, r);
+      svg.append(rect);
+    }
+  }
+  const wrap = document.getElementById("cal-wrap");
+  wrap.replaceChildren(svg);
+  wrap.scrollLeft = wrap.scrollWidth;
+
+  // Last-30-days bars
+  const n = 30, W = 880, H = 180, pl = 44, pb = 22, pt = 8;
+  const list = Array.from({ length: n }, (_, i) => ymd(addDays(end, i - n + 1)));
+  const vals = list.map(d => total(days.get(d)));
+  const max = Math.max(...vals, 1);
+  const nice = (() => { const p = 10 ** Math.floor(Math.log10(max)); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= max) return m * p; })();
+  const bsvg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Tokens per day, last 30 days" });
+  for (let i = 0; i <= 2; i++) {
+    const v = nice * i / 2, y = H - pb - (H - pb - pt) * i / 2;
+    bsvg.append(el("line", { x1: pl, x2: W, y1: y, y2: y, stroke: "var(--grid)" }));
+    const t = el("text", { x: pl - 6, y: y + 3, "text-anchor": "end" }); t.textContent = compact.format(v); bsvg.append(t);
+  }
+  const bw = (W - pl) / n;
+  list.forEach((d, i) => {
+    const v = vals[i], h = (H - pb - pt) * v / nice, x = pl + i * bw + 2, w = bw - 4;
+    const r = days.get(d);
+    if (v > 0) {
+      const rr = Math.min(4, w / 2, h);
+      const path = el("path", { class: "bar", fill: d === todayStr ? "var(--bar-today)" : "var(--bar)",
+        d: `M${x},${H - pb} V${H - pb - h + rr} Q${x},${H - pb - h} ${x + rr},${H - pb - h} H${x + w - rr} Q${x + w},${H - pb - h} ${x + w},${H - pb - h + rr} V${H - pb} Z` });
+      bindTip(path, d, r); bsvg.append(path);
+    }
+    const hit = el("rect", { x: pl + i * bw, y: pt, width: bw, height: H - pb - pt, fill: "transparent" });
+    bindTip(hit, d, r); bsvg.append(hit);
+    if (i % 7 === (n - 1) % 7) {
+      const t = el("text", { x: x + w / 2, y: H - 6, "text-anchor": "middle" });
+      t.textContent = d === todayStr ? "Today" : parse(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      bsvg.append(t);
+    }
+  });
+  document.getElementById("bars").replaceChildren(bsvg);
+
+  // Table view
+  let html = `<table><tr><th>Date</th><th>Total</th>${KEYS.map(([, l]) => `<th>${l}</th>`).join("")}</tr>`;
+  for (const d of [...list].reverse()) {
+    const r = days.get(d);
+    html += `<tr><td>${d}${d === todayStr ? " (so far)" : ""}</td><td>${r ? full.format(total(r)) : "–"}</td>${KEYS.map(([k]) => `<td>${r ? full.format(r[k] || 0) : "–"}</td>`).join("")}</tr>`;
+  }
+  document.getElementById("table").innerHTML = html + "</table>";
+}
+
+load();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>
