@@ -1,64 +1,45 @@
 # token-usage
 
-A GitHub-style calendar of my daily Claude Code token usage across all machines.
+A GitHub-style calendar of my daily Claude Code token usage across all my machines.
 
 **Live page:** https://toan-vt.github.io/token-usage/
 
 ## How it works
 
 ```
-Claude Code (every machine) ──OTLP──▶ Grafana Cloud (live metrics, 14-day retention)
-                                           │ read-only query
-                                           ▼
-             GitHub Actions, every 30 min (snapshot.py)
-               • finished days  → data/history.csv  (committed, permanent)
-               • today so far   → data/today.json   (deployed only)
-                                           ▼
-                         GitHub Pages: index.html
+each machine: Claude Code hook (after a response, at most every 30 min; in the background)
+   → push_usage.py reads ~/.claude/projects/**/*.jsonl
+   → sums tokens per UTC hour, deduplicated by message id
+   → writes data/hosts/<machine>.json in this repo (GitHub API)
+GitHub Actions on every push: build.py merges all machines → daily totals (US Eastern) → Pages
 ```
 
-Days are in US Eastern time. Totals include input, output, cache-write and cache-read tokens.
+- Each machine writes only its own file, so machines never conflict, and re-uploading never double-counts.
+- Totals are exact: they come from the per-message `usage` that Claude Code logs.
+- Nothing is lost when offline. The next upload recomputes from the local logs.
+- The installer sets `cleanupPeriodDays: 180` (6 months) so Claude Code keeps the logs, and older hours already uploaded are kept in the repo regardless.
 
-## 1. Send telemetry from each machine
+## Add a machine
 
-Add this to `~/.claude/settings.json` (merge it into any existing `env` block). Change `service.namespace` / `host.name` on each machine:
+1. Create a GitHub token once, and reuse it on every machine:
+   GitHub → Settings → Developer settings → **Fine-grained tokens** → Generate new token
+   - Repository access: **Only select repositories → token-usage**
+   - Permissions: **Contents: Read and write** (nothing else)
+2. On the machine:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/toan-vt/token-usage/main/install.sh | bash -s -- <machine-name>
+   ```
+   Paste the token when asked. You can leave it blank on machines where `gh` is logged in.
+   The installer adds `Stop` and `SessionEnd` hooks to `~/.claude/settings.json` (backup saved as `settings.json.bak`) and does a first upload.
 
-```json
-{
-  "env": {
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "OTEL_METRICS_EXPORTER": "otlp",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-<region>.grafana.net/otlp",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Basic%20<base64 of instanceID:token>",
-    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "cumulative",
-    "OTEL_RESOURCE_ATTRIBUTES": "service.namespace=mac,host.name=mac"
-  }
-}
-```
+Requirements: `python3` ≥ 3.6 and outbound HTTPS to github.com.
 
-Keep the session ID on (the default). Each session is its own counter series, and `snapshot.py` relies on that to count exactly.
-
-## 2. Repository secrets (read-only Grafana access)
-
-| Secret | Where to find it |
-|---|---|
-| `GRAFANA_PROM_URL` | Grafana Cloud → your stack → Prometheus → Details → URL |
-| `GRAFANA_PROM_USER` | same page → User / Instance ID (differs from the OTLP instance ID) |
-| `GRAFANA_TOKEN` | Access policy token with the `metrics:read` scope |
+## Handy commands
 
 ```bash
-gh secret set GRAFANA_PROM_URL
-gh secret set GRAFANA_PROM_USER
-gh secret set GRAFANA_TOKEN
-gh workflow run update.yml
+python3 ~/.claude/token-usage/push_usage.py --dry-run   # what would be uploaded
+python3 ~/.claude/token-usage/push_usage.py --run       # upload now
+cat ~/.claude/token-usage/last.log                      # background upload results
 ```
 
-If your metric name differs from `claude_code_token_usage_tokens_total` (check Grafana → Explore), set it with `gh variable set TOKEN_METRIC --body <name>`.
-
-## Local test
-
-```bash
-GRAFANA_PROM_URL=... GRAFANA_PROM_USER=... GRAFANA_TOKEN=... python3 snapshot.py
-python3 -m http.server   # then open http://localhost:8000
-```
+To remove a machine, delete the two hooks from `~/.claude/settings.json`, delete `~/.claude/token-usage/`, and delete its `data/hosts/<machine>.json` here.

@@ -1,23 +1,21 @@
-name: Update token usage
+name: Build and deploy
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 min (GitHub may delay a few minutes)
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
 concurrency:
-  group: update
-  cancel-in-progress: false
+  group: pages
+  cancel-in-progress: true   # newest upload wins; every build reads all host files
 
 jobs:
-  update:
+  deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -29,30 +27,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Snapshot from Grafana
-        env:
-          GRAFANA_PROM_URL: ${{ secrets.GRAFANA_PROM_URL }}
-          GRAFANA_PROM_USER: ${{ secrets.GRAFANA_PROM_USER }}
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
-          TOKEN_METRIC: ${{ vars.TOKEN_METRIC }}
-        run: python snapshot.py
-
-      - name: Commit finished days
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/history.csv 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "Add daily token totals"
-            git push
-          fi
-
       - name: Build site
         run: |
-          mkdir -p _site/data
+          mkdir -p _site
           cp index.html _site/
-          [ -f data/history.csv ] && cp data/history.csv _site/data/ || true
-          [ -f data/today.json ] && cp data/today.json _site/data/ || true
+          python build.py _site
 
       - uses: actions/upload-pages-artifact@v3
         with:

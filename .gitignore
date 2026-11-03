@@ -2,3 +2,4 @@ data/today.json
 _site/
 __pycache__/
 .DS_Store
+*.rtf

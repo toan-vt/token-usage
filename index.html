@@ -125,21 +125,21 @@ async function fetchText(url) {
   catch { return null; }
 }
 
+let meta = { hosts: {} };
 async function load() {
-  const [csv, todayTxt] = await Promise.all([fetchText("data/history.csv"), fetchText("data/today.json")]);
+  const txt = await fetchText("data/daily.json");
   const days = new Map();
-  if (csv) {
-    const [head, ...lines] = csv.trim().split("\n");
-    const cols = head.split(",");
-    for (const line of lines) {
-      const v = line.split(","); const r = {};
-      cols.forEach((c, i) => r[c] = c === "date" ? v[i] : +v[i]);
-      days.set(r.date, r);
-    }
-  }
-  let today = null;
-  if (todayTxt) { try { today = JSON.parse(todayTxt); days.set(today.date, { ...today, partial: true }); } catch {} }
-  render(days, today);
+  meta = { hosts: {} };
+  if (txt) { try { meta = JSON.parse(txt); } catch {} }
+  for (const [d, r] of Object.entries(meta.days || {})) days.set(d, { date: d, ...r });
+  const todayStr = nyToday();
+  if (days.has(todayStr)) days.get(todayStr).partial = true;
+  render(days, todayStr);
+}
+// Latest upload across machines, shown as "h:mm AM ET".
+function lastUpload() {
+  const ts = Object.values(meta.hosts || {}).filter(Boolean).sort().pop();
+  return ts ? new Date(ts).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }) + " ET" : null;
 }
 
 /* --- tooltip --- */
@@ -150,7 +150,7 @@ function showTip(ev, date, r) {
   else {
     html += `<div class="row"><span>Total</span><span>${full.format(total(r))}</span></div>`;
     for (const [k, label] of KEYS) html += `<div class="row"><span>${label}</span><span>${full.format(r[k] || 0)}</span></div>`;
-    if (r.partial && r.updated_at) html += `<div class="row"><span>Updated</span><span>${r.updated_at.slice(11, 16)} ET</span></div>`;
+    if (r.partial && lastUpload()) html += `<div class="row"><span>Last upload</span><span>${lastUpload()}</span></div>`;
   }
   tip.innerHTML = html; tip.style.display = "block"; moveTip(ev);
 }
@@ -170,8 +170,7 @@ function bindTip(node, date, r) {
 }
 
 /* --- render --- */
-function render(days, today) {
-  const todayStr = today ? today.date : nyToday();
+function render(days, todayStr) {
   const end = parse(todayStr);
 
   // Shade thresholds from the user's own non-zero days (quartiles), like GitHub.
@@ -189,16 +188,17 @@ function render(days, today) {
   for (let i = total(days.get(todayStr)) > 0 ? 0 : 1; ; i++) { if (total(days.get(ymd(addDays(end, -i)))) > 0) streak++; else break; }
   const tv = total(days.get(todayStr));
   document.getElementById("s-today").textContent = compact.format(tv);
-  document.getElementById("s-today-n").textContent = today ? `through ${today.updated_at.slice(11, 16)} ET` : "no data yet";
+  document.getElementById("s-today-n").textContent = lastUpload() ? `last upload ${lastUpload()}` : "no data yet";
   document.getElementById("s-30").textContent = compact.format(sumRange(30));
   document.getElementById("s-30-n").textContent = `avg ${compact.format(sumRange(30) / 30)}/day`;
   document.getElementById("s-year").textContent = compact.format(ys);
   document.getElementById("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"}`;
   document.getElementById("s-streak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
   document.getElementById("s-streak-n").textContent = nz.length ? `best day ${compact.format(nz[nz.length - 1])}` : " ";
+  const hostNames = Object.keys(meta.hosts || {});
   document.getElementById("sub").textContent = days.size
-    ? `All machines combined · days in US Eastern time · refreshes every 30 min`
-    : `No data yet. It appears after the first successful snapshot from Grafana.`;
+    ? `${hostNames.length} machine${hostNames.length === 1 ? "" : "s"} (${hostNames.join(", ")}) · days in US Eastern time · each machine uploads at most every 30 min while Claude Code is in use`
+    : `No data yet. It appears after the first upload from a machine.`;
 
   // Calendar: 53 columns (weeks, Sunday-first), ending with the current week.
   const cell = 11, gap = 3, step = cell + gap, left = 28, top = 18;
