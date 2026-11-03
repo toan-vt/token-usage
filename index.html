@@ -4,30 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Claude Code Tokens</title>
+<script>
+  // Inside another page (e.g. the toan-vt.github.io desktop window): compact header, light theme.
+  if (window.self !== window.top) {
+    document.documentElement.classList.add("embedded");
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
 <style>
   :root {
     color-scheme: light;
-    --bg: #fcfcfb;
-    --card: #ffffff;
-    --border: #e6e5e0;
-    --text: #0b0b0b;
-    --text-2: #52514e;
-    --text-3: #7a7974;
-    --grid: #ecebe7;
-    --l0: #ebeae6;
-    --l1: #b7d3f6;
-    --l2: #6da7ec;
-    --l3: #2a78d6;
-    --l4: #184f95;
-    --bar: #2a78d6;
-    --bar-today: #86b6ef;
-    --outline: #0b0b0b;
+    --bg: #fcfcfb; --card: #ffffff; --border: #e3e2dd;
+    --text: #0b0b0b; --text-2: #3f3e3b; --text-3: #6b6a65; --grid: #e8e7e3;
+    --l0: #ebeae6; --l1: #b7d3f6; --l2: #6da7ec; --l3: #2a78d6; --l4: #184f95;
+    --bar: #2a78d6; --bar-today: #86b6ef; --outline: #0b0b0b;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
       --bg: #1a1a19; --card: #222220; --border: #34332f;
-      --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2e2d2a;
+      --text: #f0efec; --text-2: #d2d1c8; --text-3: #a3a29a; --grid: #2e2d2a;
       --l0: #2b2a27; --l1: #104281; --l2: #256abf; --l3: #3987e5; --l4: #86b6ef;
       --bar: #3987e5; --bar-today: #1c5cab; --outline: #f0efec;
     }
@@ -35,45 +31,57 @@
   :root[data-theme="dark"] {
     color-scheme: dark;
     --bg: #1a1a19; --card: #222220; --border: #34332f;
-    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2e2d2a;
+    --text: #f0efec; --text-2: #d2d1c8; --text-3: #a3a29a; --grid: #2e2d2a;
     --l0: #2b2a27; --l1: #104281; --l2: #256abf; --l3: #3987e5; --l4: #86b6ef;
     --bar: #3987e5; --bar-today: #1c5cab; --outline: #f0efec;
   }
   * { box-sizing: border-box; }
+  html, body { margin: 0; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
-  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 48px; }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
-  .sub { color: var(--text-3); font-size: 13px; margin: 0 0 24px; }
-  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-  .stat .k { color: var(--text-2); font-size: 12px; }
-  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
-  .stat .n { color: var(--text-3); font-size: 12px; }
-  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
-  .scroll { overflow-x: auto; }
-  svg text { fill: var(--text-3); font-size: 10px; }
-  .cell { rx: 2; }
-  .cell:hover, .bar:hover { stroke: var(--outline); stroke-width: 1; }
-  .legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; color: var(--text-3); font-size: 11px; margin-top: 8px; }
-  .legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 40px; }
+  .embedded main { padding: 12px; }
+  h1 { font-size: 24px; font-weight: 650; margin: 0 0 4px; }
+  .sub { color: var(--text-3); font-size: 14px; margin: 0 0 20px; }
+  .embedded h1, .embedded .sub { display: none; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+  @media (max-width: 540px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .k { color: var(--text-2); font-size: 14px; font-weight: 500; }
+  .stat .v { font-size: clamp(22px, 4.6vw, 32px); font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .n { color: var(--text-3); font-size: 13px; margin-top: 2px; }
+
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  h2 { font-size: 17px; font-weight: 650; margin: 0; }
+  .head .meta { color: var(--text-3); font-size: 13px; }
+  svg { display: block; overflow: visible; }
+  svg text { fill: var(--text-3); font-size: 13px; }
+  .cell:hover, .bar:hover { stroke: var(--outline); stroke-width: 1.5; }
+  .legend { display: flex; align-items: center; gap: 5px; justify-content: flex-end; color: var(--text-3); font-size: 13px; margin-top: 10px; }
+  .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
   #tip {
     position: fixed; pointer-events: none; z-index: 10; display: none;
     background: var(--card); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
-    font-variant-numeric: tabular-nums; min-width: 160px;
+    border-radius: 8px; padding: 10px 12px; font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    font-variant-numeric: tabular-nums; min-width: 200px;
   }
-  #tip b { display: block; margin-bottom: 4px; }
-  #tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--text-2); }
-  details { margin-top: 12px; color: var(--text-2); }
-  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 12px; margin-top: 8px; }
-  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  #tip b { display: block; margin-bottom: 6px; font-size: 15px; }
+  #tip .row { display: flex; justify-content: space-between; gap: 20px; color: var(--text-2); }
+  #tip .row.total { color: var(--text); font-weight: 600; }
+
+  details { margin-top: 12px; color: var(--text-2); font-size: 14px; }
+  summary { cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  .empty { color: var(--text-3); padding: 24px 0; text-align: center; }
+  .table-wrap { overflow-x: auto; }
+  footer { color: var(--text-3); font-size: 13px; text-align: center; margin-top: 4px; }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
@@ -89,19 +97,21 @@
   </div>
 
   <section>
-    <h2>Daily tokens, last 12 months</h2>
-    <div class="scroll" id="cal-wrap"></div>
+    <div class="head"><h2>Daily tokens</h2><span class="meta" id="cal-range"></span></div>
+    <div id="cal"></div>
     <div class="legend">Less <i style="background:var(--l0)"></i><i style="background:var(--l1)"></i><i style="background:var(--l2)"></i><i style="background:var(--l3)"></i><i style="background:var(--l4)"></i> More</div>
   </section>
 
   <section>
-    <h2>Last 30 days</h2>
+    <div class="head"><h2 id="bars-title">Last 30 days</h2><span class="meta">hover a bar for details</span></div>
     <div id="bars"></div>
     <details>
       <summary>Show as table</summary>
-      <div id="table"></div>
+      <div class="table-wrap" id="table"></div>
     </details>
   </section>
+
+  <footer id="foot"></footer>
 </main>
 <div id="tip" role="tooltip"></div>
 
@@ -111,165 +121,194 @@ const TZ = "America/New_York";
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const full = new Intl.NumberFormat("en");
 const KEYS = [["input", "Input"], ["output", "Output"], ["cache_write", "Cache write"], ["cache_read", "Cache read"]];
+const embedded = document.documentElement.classList.contains("embedded");
 
 const ymd = d => d.toISOString().slice(0, 10);
 const parse = s => new Date(s + "T00:00:00Z");
 const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
 const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 const fmtDate = s => parse(s).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" });
+const short = s => parse(s).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const total = r => r ? KEYS.reduce((a, [k]) => a + (+r[k] || 0), 0) : 0;
 const el = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const txt = (x, y, s, anchor = "start") => { const t = el("text", { x, y, "text-anchor": anchor }); t.textContent = s; return t; };
+const $ = id => document.getElementById(id);
 
-async function fetchText(url) {
-  try { const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" }); return r.ok ? r.text() : null; }
-  catch { return null; }
-}
+let state = { days: new Map(), today: nyToday(), meta: { hosts: {} } };
 
-let meta = { hosts: {} };
 async function load() {
-  const txt = await fetchText("data/daily.json");
+  let meta = { hosts: {} };
+  try {
+    const r = await fetch("data/daily.json?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) meta = await r.json();
+  } catch {}
   const days = new Map();
-  meta = { hosts: {} };
-  if (txt) { try { meta = JSON.parse(txt); } catch {} }
   for (const [d, r] of Object.entries(meta.days || {})) days.set(d, { date: d, ...r });
-  const todayStr = nyToday();
-  if (days.has(todayStr)) days.get(todayStr).partial = true;
-  render(days, todayStr);
+  const today = nyToday();
+  if (days.has(today)) days.get(today).partial = true;
+  state = { days, today, meta };
+  render();
 }
-// Latest upload across machines, shown as "h:mm AM ET".
+
 function lastUpload() {
-  const ts = Object.values(meta.hosts || {}).filter(Boolean).sort().pop();
+  const ts = Object.values(state.meta.hosts || {}).filter(Boolean).sort().pop();
   return ts ? new Date(ts).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }) + " ET" : null;
 }
 
-/* --- tooltip --- */
-const tip = document.getElementById("tip");
-function showTip(ev, date, r) {
+/* ---------- tooltip ---------- */
+const tip = $("tip");
+function showTip(ev, date) {
+  const r = state.days.get(date);
   let html = `<b>${fmtDate(date)}${r && r.partial ? " · so far" : ""}</b>`;
-  if (!r) html += `<div class="row">No data</div>`;
+  if (!r || !total(r)) html += `<div class="row">No usage</div>`;
   else {
-    html += `<div class="row"><span>Total</span><span>${full.format(total(r))}</span></div>`;
+    html += `<div class="row total"><span>Total</span><span>${full.format(total(r))}</span></div>`;
     for (const [k, label] of KEYS) html += `<div class="row"><span>${label}</span><span>${full.format(r[k] || 0)}</span></div>`;
     if (r.partial && lastUpload()) html += `<div class="row"><span>Last upload</span><span>${lastUpload()}</span></div>`;
   }
   tip.innerHTML = html; tip.style.display = "block"; moveTip(ev);
 }
 function moveTip(ev) {
-  const pad = 12, w = tip.offsetWidth, h = tip.offsetHeight;
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
   let x = ev.clientX + pad, y = ev.clientY + pad;
-  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
-  if (y + h > innerHeight - 8) y = ev.clientY - h - pad;
+  if (x + w > innerWidth - 6) x = Math.max(6, ev.clientX - w - pad);
+  if (y + h > innerHeight - 6) y = Math.max(6, ev.clientY - h - pad);
   tip.style.left = x + "px"; tip.style.top = y + "px";
 }
 const hideTip = () => tip.style.display = "none";
-function bindTip(node, date, r) {
-  node.addEventListener("mouseenter", e => showTip(e, date, r));
+function bindTip(node, date) {
+  node.addEventListener("mouseenter", e => showTip(e, date));
   node.addEventListener("mousemove", moveTip);
   node.addEventListener("mouseleave", hideTip);
-  node.addEventListener("click", e => showTip(e, date, r));
+  node.addEventListener("click", e => { showTip(e, date); e.stopPropagation(); });
+}
+document.addEventListener("click", hideTip);
+
+/* ---------- render ---------- */
+function render() {
+  const { days, today } = state;
+  const end = parse(today);
+  const nz = [...days.values()].map(total).filter(v => v > 0).sort((a, b) => a - b);
+
+  // Stats
+  const sumLast = n => { let s = 0; for (let i = 0; i < n; i++) s += total(days.get(ymd(addDays(end, -i)))); return s; };
+  const year = today.slice(0, 4);
+  let ys = 0, yd = 0;
+  for (const [d, r] of days) if (d.startsWith(year) && total(r) > 0) { ys += total(r); yd++; }
+  let streak = 0;
+  for (let i = total(days.get(today)) > 0 ? 0 : 1; total(days.get(ymd(addDays(end, -i)))) > 0; i++) streak++;
+  const s30 = sumLast(30);
+  $("s-today").textContent = compact.format(total(days.get(today)));
+  $("s-today-n").textContent = lastUpload() ? `last upload ${lastUpload()}` : "no data yet";
+  $("s-30").textContent = compact.format(s30);
+  $("s-30-n").textContent = `avg ${compact.format(s30 / 30)}/day`;
+  $("s-year").textContent = compact.format(ys);
+  $("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"}`;
+  $("s-streak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
+  $("s-streak-n").textContent = nz.length ? `best day ${compact.format(nz[nz.length - 1])}` : " ";
+  const hosts = Object.keys(state.meta.hosts || {}).sort();
+  const machines = `${hosts.length} machine${hosts.length === 1 ? "" : "s"}${hosts.length ? ` (${hosts.join(", ")})` : ""}`;
+  $("sub").textContent = days.size ? `${machines} · days in US Eastern time` : "No data yet. It appears after the first upload from a machine.";
+  $("foot").innerHTML = embedded
+    ? `${machines} · US Eastern days · <a href="https://toan-vt.github.io/token-usage/" target="_blank" rel="noopener">open full page</a>`
+    : "";
+
+  renderCalendar(nz, end, today);
+  renderBars(end, today);
 }
 
-/* --- render --- */
-function render(days, todayStr) {
-  const end = parse(todayStr);
-
-  // Shade thresholds from the user's own non-zero days (quartiles), like GitHub.
-  const nz = [...days.values()].map(total).filter(v => v > 0).sort((a, b) => a - b);
+function renderCalendar(nz, end, today) {
+  const wrap = $("cal");
+  const W = wrap.clientWidth;
+  // Shade thresholds = quartiles of your own non-zero days (like GitHub).
   const q = p => nz.length ? nz[Math.min(nz.length - 1, Math.floor(p * nz.length))] : Infinity;
   const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
   const level = v => v <= 0 ? 0 : v < t1 ? 1 : v < t2 ? 2 : v < t3 ? 3 : 4;
 
-  // Stats
-  const sumRange = n => { let s = 0; for (let i = 0; i < n; i++) s += total(days.get(ymd(addDays(end, -i)))); return s; };
-  const year = todayStr.slice(0, 4);
-  let ys = 0, yd = 0;
-  for (const [d, r] of days) if (d.startsWith(year)) { ys += total(r); if (total(r) > 0) yd++; }
-  let streak = 0;
-  for (let i = total(days.get(todayStr)) > 0 ? 0 : 1; ; i++) { if (total(days.get(ymd(addDays(end, -i)))) > 0) streak++; else break; }
-  const tv = total(days.get(todayStr));
-  document.getElementById("s-today").textContent = compact.format(tv);
-  document.getElementById("s-today-n").textContent = lastUpload() ? `last upload ${lastUpload()}` : "no data yet";
-  document.getElementById("s-30").textContent = compact.format(sumRange(30));
-  document.getElementById("s-30-n").textContent = `avg ${compact.format(sumRange(30) / 30)}/day`;
-  document.getElementById("s-year").textContent = compact.format(ys);
-  document.getElementById("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"}`;
-  document.getElementById("s-streak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
-  document.getElementById("s-streak-n").textContent = nz.length ? `best day ${compact.format(nz[nz.length - 1])}` : " ";
-  const hostNames = Object.keys(meta.hosts || {});
-  document.getElementById("sub").textContent = days.size
-    ? `${hostNames.length} machine${hostNames.length === 1 ? "" : "s"} (${hostNames.join(", ")}) · days in US Eastern time · each machine uploads at most every 30 min while Claude Code is in use`
-    : `No data yet. It appears after the first upload from a machine.`;
+  // Big, readable cells: grow to fill the width; in narrow windows show fewer weeks instead of shrinking.
+  const left = 40, top = 22, gap = 4;
+  const cell = Math.max(16, Math.min(28, Math.floor((W - left) / 53) - gap));
+  const step = cell + gap;
+  const weeks = Math.max(4, Math.min(53, Math.floor((W - left + gap) / step)));
+  const start = addDays(end, -((weeks - 1) * 7 + end.getUTCDay()));
+  const months = Math.round(weeks / 4.35);
+  $("cal-range").textContent = weeks >= 52 ? "last 12 months" : `last ${months} month${months === 1 ? "" : "s"}`;
 
-  // Calendar: 53 columns (weeks, Sunday-first), ending with the current week.
-  const cell = 11, gap = 3, step = cell + gap, left = 28, top = 18;
-  const start = addDays(end, -(52 * 7 + end.getUTCDay()));
-  const weeks = 53;
-  const svg = el("svg", { width: left + weeks * step + 16, height: top + 7 * step, role: "img", "aria-label": "Daily token usage calendar" });
-  ["Mon", "Wed", "Fri"].forEach((n, i) => { const t = el("text", { x: 0, y: top + (1 + 2 * i) * step + 9 }); t.textContent = n; svg.append(t); });
-  let lastMonth = -1;
+  const svg = el("svg", { width: left + weeks * step - gap, height: top + 7 * step - gap, role: "img", "aria-label": "Daily token usage calendar" });
+  [[1, "Mon"], [3, "Wed"], [5, "Fri"]].forEach(([d, n]) => svg.append(txt(0, top + d * step + cell / 2 + 4, n)));
+  let lastLabelX = -99;
   for (let w = 0; w < weeks; w++) {
     const wk = addDays(start, w * 7);
-    if (wk.getUTCMonth() !== lastMonth && wk.getUTCDate() <= 7) {
-      lastMonth = wk.getUTCMonth();
-      const t = el("text", { x: left + w * step, y: 10 });
-      t.textContent = wk.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
-      svg.append(t);
+    const x = left + w * step;
+    // Month label on the first week that starts in a new month (skip if too close to the previous label).
+    const prev = addDays(wk, -7);
+    if ((w === 0 || prev.getUTCMonth() !== wk.getUTCMonth()) && x - lastLabelX > 36) {
+      svg.append(txt(x, 14, wk.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })));
+      lastLabelX = x;
     }
     for (let d = 0; d < 7; d++) {
       const day = addDays(wk, d);
       if (day > end) continue;
-      const ds = ymd(day), r = days.get(ds);
-      const rect = el("rect", { class: "cell", x: left + w * step, y: top + d * step, width: cell, height: cell,
-        fill: `var(--l${level(total(r))})` });
-      if (ds === todayStr) rect.setAttribute("style", "stroke:var(--outline);stroke-width:1.5");
-      bindTip(rect, ds, r);
+      const ds = ymd(day);
+      const rect = el("rect", { class: "cell", x, y: top + d * step, width: cell, height: cell, rx: 3,
+        fill: `var(--l${level(total(state.days.get(ds)))})` });
+      if (ds === today) rect.setAttribute("style", "stroke:var(--outline);stroke-width:2");
+      bindTip(rect, ds);
       svg.append(rect);
     }
   }
-  const wrap = document.getElementById("cal-wrap");
   wrap.replaceChildren(svg);
-  wrap.scrollLeft = wrap.scrollWidth;
+}
 
-  // Last-30-days bars
-  const n = 30, W = 880, H = 180, pl = 44, pb = 22, pt = 8;
+function renderBars(end, today) {
+  const wrap = $("bars");
+  const W = wrap.clientWidth;
+  const n = W >= 640 ? 30 : W >= 420 ? 21 : 14;
+  $("bars-title").textContent = `Last ${n} days`;
+  const H = 210, pl = 48, pb = 26, pt = 10;
   const list = Array.from({ length: n }, (_, i) => ymd(addDays(end, i - n + 1)));
-  const vals = list.map(d => total(days.get(d)));
+  const vals = list.map(d => total(state.days.get(d)));
   const max = Math.max(...vals, 1);
-  const nice = (() => { const p = 10 ** Math.floor(Math.log10(max)); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= max) return m * p; })();
-  const bsvg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Tokens per day, last 30 days" });
+  const p = 10 ** Math.floor(Math.log10(max));
+  const nice = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map(m => m * p).find(v => v >= max);
+
+  const svg = el("svg", { width: W, height: H, role: "img", "aria-label": `Tokens per day, last ${n} days` });
   for (let i = 0; i <= 2; i++) {
-    const v = nice * i / 2, y = H - pb - (H - pb - pt) * i / 2;
-    bsvg.append(el("line", { x1: pl, x2: W, y1: y, y2: y, stroke: "var(--grid)" }));
-    const t = el("text", { x: pl - 6, y: y + 3, "text-anchor": "end" }); t.textContent = compact.format(v); bsvg.append(t);
+    const y = H - pb - (H - pb - pt) * i / 2;
+    svg.append(el("line", { x1: pl, x2: W, y1: y, y2: y, stroke: "var(--grid)" }));
+    svg.append(txt(pl - 8, y + 4, compact.format(nice * i / 2), "end"));
   }
   const bw = (W - pl) / n;
+  const labelEvery = n >= 30 ? 7 : n >= 21 ? 5 : 3;
   list.forEach((d, i) => {
-    const v = vals[i], h = (H - pb - pt) * v / nice, x = pl + i * bw + 2, w = bw - 4;
-    const r = days.get(d);
+    const v = vals[i], h = (H - pb - pt) * v / nice, x = pl + i * bw + Math.max(1, bw * 0.12), w = bw - 2 * Math.max(1, bw * 0.12);
     if (v > 0) {
-      const rr = Math.min(4, w / 2, h);
-      const path = el("path", { class: "bar", fill: d === todayStr ? "var(--bar-today)" : "var(--bar)",
-        d: `M${x},${H - pb} V${H - pb - h + rr} Q${x},${H - pb - h} ${x + rr},${H - pb - h} H${x + w - rr} Q${x + w},${H - pb - h} ${x + w},${H - pb - h + rr} V${H - pb} Z` });
-      bindTip(path, d, r); bsvg.append(path);
+      const rr = Math.min(4, w / 2, h), b = H - pb, t = b - h;
+      const path = el("path", { class: "bar", fill: d === today ? "var(--bar-today)" : "var(--bar)",
+        d: `M${x},${b} V${t + rr} Q${x},${t} ${x + rr},${t} H${x + w - rr} Q${x + w},${t} ${x + w},${t + rr} V${b} Z` });
+      svg.append(path);
     }
     const hit = el("rect", { x: pl + i * bw, y: pt, width: bw, height: H - pb - pt, fill: "transparent" });
-    bindTip(hit, d, r); bsvg.append(hit);
-    if (i % 7 === (n - 1) % 7) {
-      const t = el("text", { x: x + w / 2, y: H - 6, "text-anchor": "middle" });
-      t.textContent = d === todayStr ? "Today" : parse(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-      bsvg.append(t);
-    }
+    bindTip(hit, d); svg.append(hit);
+    if ((n - 1 - i) % labelEvery === 0) svg.append(txt(x + w / 2, H - 6, d === today ? "Today" : short(d), "middle"));
   });
-  document.getElementById("bars").replaceChildren(bsvg);
+  wrap.replaceChildren(svg);
 
-  // Table view
   let html = `<table><tr><th>Date</th><th>Total</th>${KEYS.map(([, l]) => `<th>${l}</th>`).join("")}</tr>`;
   for (const d of [...list].reverse()) {
-    const r = days.get(d);
-    html += `<tr><td>${d}${d === todayStr ? " (so far)" : ""}</td><td>${r ? full.format(total(r)) : "–"}</td>${KEYS.map(([k]) => `<td>${r ? full.format(r[k] || 0) : "–"}</td>`).join("")}</tr>`;
+    const r = state.days.get(d);
+    html += `<tr><td>${short(d)}${d === today ? " (so far)" : ""}</td><td>${r ? full.format(total(r)) : "–"}</td>${KEYS.map(([k]) => `<td>${r ? full.format(r[k] || 0) : "–"}</td>`).join("")}</tr>`;
   }
-  document.getElementById("table").innerHTML = html + "</table>";
+  $("table").innerHTML = html + "</table>";
 }
+
+// Re-layout when the window (or the desktop app window around the iframe) is resized.
+let raf = 0, lastW = 0;
+new ResizeObserver(([e]) => {
+  const w = Math.round(e.contentRect.width);
+  if (w === lastW) return;
+  lastW = w; cancelAnimationFrame(raf); raf = requestAnimationFrame(render);
+}).observe(document.querySelector("main"));
 
 load();
 setInterval(load, 5 * 60 * 1000);
