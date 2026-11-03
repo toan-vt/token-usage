@@ -46,7 +46,7 @@ Machines that can already `git push` to GitHub over SSH need no token. Leave the
    Paste the token when asked. Leave it blank on machines where `gh` is logged in or GitHub SSH access works.
    The installer adds `Stop` and `SessionEnd` hooks to `~/.claude/settings.json` (backup saved as `settings.json.bak`) and does a first upload.
 
-Requirements: `python3` ≥ 3.6 and outbound HTTPS to github.com.
+Requirements: `python3` ≥ 3.6 and access to github.com over HTTPS (token) or SSH.
 
 ## Handy commands
 
