@@ -30,7 +30,7 @@ if [ -z "$TOKEN" ] && [ -z "${TU_TOKEN+x}" ]; then
   if command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
     echo "gh is logged in here, so you can leave the token blank."
   fi
-  read -r -s -p "GitHub token for $REPO (leave blank to use gh): " TOKEN </dev/tty; echo
+  read -r -s -p "GitHub token for $REPO (leave blank to use gh / git credentials): " TOKEN </dev/tty; echo
 fi
 
 umask 077

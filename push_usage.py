@@ -13,7 +13,8 @@ Usage:
 
 Config: ~/.claude/token-usage/config.json
   {"repo": "toan-vt/token-usage", "host": "mac", "token": "github_pat_..."}
-  If "token" is empty, `gh auth token` is used when gh is installed.
+  If "token" is empty: $GITHUB_TOKEN, then `gh auth token`, then git's stored
+  credentials for github.com (`git credential fill`) are used.
 
 Works with Python 3.6+ and the standard library only.
 """
@@ -47,11 +48,30 @@ def load_config():
     cfg.setdefault("repo", "toan-vt/token-usage")
     cfg.setdefault("host", socket.gethostname().split(".")[0])
     if not cfg.get("token"):
-        try:
-            cfg["token"] = subprocess.check_output(["gh", "auth", "token"], stderr=subprocess.DEVNULL).decode().strip()
-        except Exception:
-            cfg["token"] = ""
+        cfg["token"] = find_token()
     return cfg
+
+
+def find_token():
+    """Fallbacks when config has no token: $GITHUB_TOKEN, `gh auth token`, then git's stored credentials."""
+    if os.environ.get("GITHUB_TOKEN"):
+        return os.environ["GITHUB_TOKEN"]
+    try:
+        tok = subprocess.check_output(["gh", "auth", "token"], stderr=subprocess.DEVNULL).decode().strip()
+        if tok:
+            return tok
+    except Exception:
+        pass
+    try:
+        env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+        p = subprocess.run(["git", "credential", "fill"], input=b"protocol=https\nhost=github.com\n\n",
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=15)
+        for line in p.stdout.decode().splitlines():
+            if line.startswith("password="):
+                return line[len("password="):].strip()
+    except Exception:
+        pass
+    return ""
 
 
 def compute_hours():
