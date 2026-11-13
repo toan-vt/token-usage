@@ -16,10 +16,10 @@ What changes: only the script `~/.claude/token-usage/push_usage.py`. The hooks i
 ### 1. Check the current install
 ```bash
 ls ~/.claude/token-usage/push_usage.py
-python3 ~/.claude/token-usage/push_usage.py --version 2>/dev/null || echo "version 1 (no --version flag)"
+grep -m1 '^VERSION = ' ~/.claude/token-usage/push_usage.py || echo "VERSION = 1 (no VERSION line)"
 python3 -c 'import json,os; print("machine:", json.load(open(os.path.expanduser("~/.claude/token-usage/config.json")))["host"])'
 ```
-If it already says `version 2`, skip to step 3.
+Don't run the old script with `--version` to check: version 1 ignores unknown flags and does a normal upload instead. If it already says `VERSION = 2`, skip to step 3.
 
 ### 2. Replace the script
 The new file is downloaded next to the old one, checked, and only then swapped in, so a failed download never breaks the hooks:
