@@ -1,6 +1,6 @@
 # token-usage
 
-A GitHub-style calendar of my daily Claude Code token usage across all my machines.
+A GitHub-style calendar of my daily Claude Code token usage and estimated cost across all my machines.
 
 **Live page:** https://toan-vt.github.io/token-usage/
 
@@ -9,13 +9,15 @@ A GitHub-style calendar of my daily Claude Code token usage across all my machin
 ```
 each machine: Claude Code hook (after a response, at most every 30 min; in the background)
    → push_usage.py reads ~/.claude/projects/**/*.jsonl
-   → sums tokens per UTC hour, deduplicated by message id
-   → writes data/hosts/<machine>.json in this repo (GitHub API)
-GitHub Actions on every push: build.py merges all machines → daily totals (US Eastern) → Pages
+   → sums tokens per UTC hour and per model, deduplicated by message id
+   → writes data/hosts/<machine>.json in this repo (GitHub API or git over SSH)
+GitHub Actions on every push: build.py merges all machines, applies prices.json
+   → daily tokens + estimated cost (US Eastern days) → Pages
 ```
 
 - Each machine writes only its own file, so machines never conflict, and re-uploading never double-counts.
 - Totals are exact: they come from the per-message `usage` that Claude Code logs.
+- **Cost is an estimate at Claude API list prices** (`prices.json`, from the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing)), not what a subscription bills. It accounts for 5-minute vs 1-hour cache writes, each model's cache-read rate, Haiku 5.5's higher rate for prompts over 100K tokens, fast mode, US-only inference (1.1×), and web searches ($10 per 1,000). When prices change, edit `prices.json` only; machines don't need updating. Usage from models not in `prices.json`, or from machines still on uploader version 1 (no model info), shows as "unpriced" (marked `*`).
 - Nothing is lost when offline. The next upload recomputes from the local logs.
 - The installer sets `cleanupPeriodDays: 180` (6 months) so Claude Code keeps the logs, and older hours already uploaded are kept in the repo regardless.
 
@@ -48,10 +50,21 @@ Machines that can already `git push` to GitHub over SSH need no token. Leave the
 
 Requirements: `python3` ≥ 3.6 and access to github.com over HTTPS (token) or SSH.
 
+## Update a machine
+
+When the uploader changes (check with `python3 ~/.claude/token-usage/push_usage.py --version`; current is **version 2**), start Claude Code on that machine and paste:
+
+```
+Follow https://raw.githubusercontent.com/toan-vt/token-usage/main/UPDATE_INSTRUCTION.md to update this machine
+```
+
+It replaces only the script; hooks, machine name and credentials stay as they are. See [UPDATE_INSTRUCTION.md](UPDATE_INSTRUCTION.md).
+
 ## Handy commands
 
 ```bash
-python3 ~/.claude/token-usage/push_usage.py --dry-run   # what would be uploaded
+python3 ~/.claude/token-usage/push_usage.py --version   # uploader version
+python3 ~/.claude/token-usage/push_usage.py --dry-run   # what would be uploaded, per day and per model
 python3 ~/.claude/token-usage/push_usage.py --run       # upload now
 cat ~/.claude/token-usage/last.log                      # background upload results
 ```

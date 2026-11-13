@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 """Upload this machine's Claude Code token usage to the token-usage GitHub repo.
 
-Reads ~/.claude/projects/**/*.jsonl, sums tokens per UTC hour (deduplicated by
-message id), and writes data/hosts/<host>.json in the repo via the GitHub API.
+Reads ~/.claude/projects/**/*.jsonl, sums tokens per UTC hour and per model
+(deduplicated by message id), and writes data/hosts/<host>.json in the repo.
 Each machine only ever writes its own file, so machines never conflict.
+
+File format (version 2):
+  {"host": ..., "updated_at": ..., "version": 2,
+   "hours": {"YYYY-MM-DDTHH": {"<model>[+flags]": [input, output, cache_write_5m,
+                                                    cache_write_1h, cache_read, web_searches]}}}
+  Flags change the price: "+fast" (fast mode), "+us" (US-only inference_geo),
+  "+p100k" / "+p200k" (prompt incl. cache over 100K / 200K tokens).
+  Prices are applied later by build.py (prices.json), not here.
+  Version 1 files stored a plain [input, output, cache_write, cache_read] list per hour.
 
 Usage:
   push_usage.py --hook stop     # from a Claude Code Stop hook (throttled, runs in background)
   push_usage.py --hook end      # from a SessionEnd hook (shorter throttle)
   push_usage.py --run           # compute + upload now (foreground)
   push_usage.py --dry-run       # compute and print a summary, no upload
+  push_usage.py --version       # print the uploader version
 
 Config: ~/.claude/token-usage/config.json
   {"repo": "toan-vt/token-usage", "host": "mac", "token": "github_pat_..."}
@@ -40,7 +50,8 @@ LOCK = os.path.join(APP_DIR, ".lock")
 LOG = os.path.join(APP_DIR, "last.log")
 PROJECTS = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", os.path.join(HOME, ".claude")), "projects")
 THROTTLE = {"stop": 30 * 60, "end": 5 * 60}
-# per-hour value: [input, output, cache_write, cache_read]
+VERSION = 2
+N = 6  # [input, output, cache_write_5m, cache_write_1h, cache_read, web_searches]
 
 
 def load_config():
@@ -77,9 +88,31 @@ def find_token():
     return ""
 
 
+def usage_vector(u):
+    """[input, output, cache_write_5m, cache_write_1h, cache_read, web_searches] from one usage object."""
+    cw_total = int(u.get("cache_creation_input_tokens") or 0)
+    cc = u.get("cache_creation") or {}
+    cw1h = int(cc.get("ephemeral_1h_input_tokens") or 0)
+    cw5m = max(cw_total - cw1h, int(cc.get("ephemeral_5m_input_tokens") or 0))
+    ws = int((u.get("server_tool_use") or {}).get("web_search_requests") or 0)
+    return [int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0),
+            cw5m, cw1h, int(u.get("cache_read_input_tokens") or 0), ws]
+
+
+def model_key(m, u):
+    """Model id plus flags for anything that changes its price (prompt size is added later)."""
+    key = m.get("model") or "unknown"
+    if u.get("speed") == "fast":
+        key += "+fast"
+    geo = u.get("inference_geo")
+    if geo and geo not in ("global", "not_available"):
+        key += "+" + str(geo)
+    return key
+
+
 def compute_hours():
-    """{'YYYY-MM-DDTHH' (UTC): [input, output, cache_write, cache_read]}"""
-    best = {}  # message id -> (hour, [4 ints]); keep the max per field across duplicate lines
+    """({'YYYY-MM-DDTHH' (UTC): {model_key: [6 ints]}}, number of messages)"""
+    best = {}  # message id -> [hour, model_key, vals]; keep the max per field across duplicate lines
     for path in glob.glob(os.path.join(PROJECTS, "**", "*.jsonl"), recursive=True):
         try:
             f = open(path, encoding="utf-8", errors="ignore")
@@ -98,26 +131,30 @@ def compute_hours():
                 ts = d.get("timestamp") or ""
                 if d.get("type") != "assistant" or not u or len(ts) < 13:
                     continue
-                vals = [int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0),
-                        int(u.get("cache_creation_input_tokens") or 0), int(u.get("cache_read_input_tokens") or 0)]
+                vals = usage_vector(u)
                 if not any(vals):
                     continue
                 key = m.get("id") or d.get("requestId") or d.get("uuid")
                 prev = best.get(key)
                 if prev is None:
-                    best[key] = (ts[:13], vals)
+                    best[key] = [ts[:13], model_key(m, u), vals]
                 else:
-                    best[key] = (prev[0], [max(a, b) for a, b in zip(prev[1], vals)])
+                    prev[2] = [max(a, b) for a, b in zip(prev[2], vals)]
     hours = {}
-    for hour, vals in best.values():
-        acc = hours.setdefault(hour, [0, 0, 0, 0])
-        for i in range(4):
+    for hour, mkey, vals in best.values():
+        prompt = vals[0] + vals[2] + vals[3] + vals[4]  # all input tokens incl. cache reads/writes
+        if prompt > 200000:
+            mkey += "+p200k"
+        elif prompt > 100000:
+            mkey += "+p100k"
+        acc = hours.setdefault(hour, {}).setdefault(mkey, [0] * N)
+        for i in range(N):
             acc[i] += vals[i]
     return hours, len(best)
 
 
-def gh_request(cfg, method, path, body=None):
-    url = "https://api.github.com/repos/%s/contents/%s" % (cfg["repo"], path)
+def gh_request(cfg, method, path, body=None, url=None):
+    url = url or "https://api.github.com/repos/%s/contents/%s" % (cfg["repo"], path)
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", "Bearer " + cfg["token"])
@@ -143,7 +180,7 @@ def merged_doc(cfg, old, hours):
     if merged == old:
         return None, len(merged)
     doc = {"host": cfg["host"], "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-           "hours": {h: merged[h] for h in sorted(merged)}}
+           "version": VERSION, "hours": {h: merged[h] for h in sorted(merged)}}
     return json.dumps(doc, separators=(",", ":")).encode(), len(merged)
 
 
@@ -153,7 +190,11 @@ def upload_api(cfg, hours):
     sha, old = None, {}
     if remote:
         sha = remote["sha"]
-        old = json.loads(base64.b64decode(remote["content"]).decode()).get("hours", {})
+        raw = remote.get("content") or ""
+        if remote.get("encoding") != "base64" or not raw:  # files over 1 MB come without content
+            blob = gh_request(cfg, "GET", None, url="https://api.github.com/repos/%s/git/blobs/%s" % (cfg["repo"], sha))
+            raw = blob["content"]
+        old = json.loads(base64.b64decode(raw).decode()).get("hours", {})
     content, n = merged_doc(cfg, old, hours)
     if content is None:
         return "unchanged"
@@ -253,14 +294,23 @@ def main(argv):
         i = argv.index("--hook")
         hook(argv[i + 1] if i + 1 < len(argv) else "stop")
         return 0
+    if "--version" in argv:
+        print("token-usage uploader version %d" % VERSION)
+        return 0
     if "--dry-run" in argv:
         hours, n = compute_hours()
-        days = {}
-        for h, v in hours.items():
-            days[h[:10]] = days.get(h[:10], 0) + sum(v)
+        days, models = {}, {}
+        for h, per_model in hours.items():
+            for mkey, v in per_model.items():
+                tokens = sum(v[:5])
+                days[h[:10]] = days.get(h[:10], 0) + tokens
+                models[mkey] = models.get(mkey, 0) + tokens
         for d in sorted(days)[-10:]:
             print("%s  %15s tokens (UTC day)" % (d, "{:,}".format(days[d])))
-        print("%d unique messages, %d hours, config: %s" % (n, len(hours), load_config()["host"]))
+        print("by model:")
+        for mkey in sorted(models, key=models.get, reverse=True):
+            print("  %-32s %15s tokens" % (mkey, "{:,}".format(models[mkey])))
+        print("%d unique messages, %d hours, version %d, host: %s" % (n, len(hours), VERSION, load_config()["host"]))
         return 0
     try:
         result = run()

@@ -73,6 +73,8 @@
   #tip b { display: block; margin-bottom: 6px; font-size: 15px; }
   #tip .row { display: flex; justify-content: space-between; gap: 20px; color: var(--text-2); }
   #tip .row.total { color: var(--text); font-weight: 600; }
+  #tip .sep { border-top: 1px solid var(--border); margin: 6px 0; }
+  #tip .note { color: var(--text-3); font-size: 12px; margin-top: 6px; max-width: 260px; }
 
   details { margin-top: 12px; color: var(--text-2); font-size: 14px; }
   summary { cursor: pointer; }
@@ -91,9 +93,9 @@
 
   <div class="stats">
     <div class="stat"><div class="k">Today so far</div><div class="v" id="s-today">–</div><div class="n" id="s-today-n">&nbsp;</div></div>
+    <div class="stat"><div class="k">Est. cost today</div><div class="v" id="s-cost">–</div><div class="n" id="s-cost-n">&nbsp;</div></div>
     <div class="stat"><div class="k">Last 30 days</div><div class="v" id="s-30">–</div><div class="n" id="s-30-n">&nbsp;</div></div>
     <div class="stat"><div class="k">This year</div><div class="v" id="s-year">–</div><div class="n" id="s-year-n">&nbsp;</div></div>
-    <div class="stat"><div class="k">Current streak</div><div class="v" id="s-streak">–</div><div class="n" id="s-streak-n">&nbsp;</div></div>
   </div>
 
   <section>
@@ -130,6 +132,17 @@ const nyToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(
 const fmtDate = s => parse(s).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" });
 const short = s => parse(s).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const total = r => r ? KEYS.reduce((a, [k]) => a + (+r[k] || 0), 0) : 0;
+const cost = r => (r && +r.cost) || 0;
+const unpriced = r => (r && +r.unpriced) || 0;
+const usd = v => v >= 10000
+  ? "$" + compact.format(v)
+  : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: v >= 100 ? 0 : 2, minimumFractionDigits: v >= 100 ? 0 : 2 }).format(v);
+// "claude-opus-5-5" -> "Opus 5.5", "claude-haiku-4-5-20251001" -> "Haiku 4.5"
+const modelName = id => {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(id);
+  if (!m) return id === "unknown" ? "Unknown model" : id;
+  return m[1][0].toUpperCase() + m[1].slice(1) + " " + m[2] + (m[3] ? "." + m[3] : "");
+};
 const el = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 const txt = (x, y, s, anchor = "start") => { const t = el("text", { x, y, "text-anchor": anchor }); t.textContent = s; return t; };
 const $ = id => document.getElementById(id);
@@ -163,7 +176,16 @@ function showTip(ev, date) {
   if (!r || !total(r)) html += `<div class="row">No usage</div>`;
   else {
     html += `<div class="row total"><span>Total</span><span>${full.format(total(r))}</span></div>`;
+    html += `<div class="row total"><span>Est. cost</span><span>${usd(cost(r))}${unpriced(r) ? "*" : ""}</span></div>`;
     for (const [k, label] of KEYS) html += `<div class="row"><span>${label}</span><span>${full.format(r[k] || 0)}</span></div>`;
+    const models = Object.entries(r.models || {}).sort((a, b) => b[1].tokens - a[1].tokens);
+    if (models.length) {
+      html += `<div class="sep"></div>`;
+      for (const [id, m] of models) {
+        html += `<div class="row"><span>${modelName(id)}</span><span>${compact.format(m.tokens)} · ${m.cost == null ? "unpriced" : usd(m.cost)}</span></div>`;
+      }
+    }
+    if (unpriced(r)) html += `<div class="note">* excludes ${compact.format(unpriced(r))} tokens with no price (machine not updated yet, or unknown model)</div>`;
     if (r.partial && lastUpload()) html += `<div class="row"><span>Last upload</span><span>${lastUpload()}</span></div>`;
   }
   tip.innerHTML = html; tip.style.display = "block"; moveTip(ev);
@@ -192,26 +214,28 @@ function render() {
 
   // Stats
   const sumLast = n => { let s = 0; for (let i = 0; i < n; i++) s += total(days.get(ymd(addDays(end, -i)))); return s; };
+  const costLast = n => { let s = 0, u = 0; for (let i = 0; i < n; i++) { const r = days.get(ymd(addDays(end, -i))); s += cost(r); u += unpriced(r); } return [s, u]; };
   const year = today.slice(0, 4);
-  let ys = 0, yd = 0;
-  for (const [d, r] of days) if (d.startsWith(year) && total(r) > 0) { ys += total(r); yd++; }
-  let streak = 0;
-  for (let i = total(days.get(today)) > 0 ? 0 : 1; total(days.get(ymd(addDays(end, -i)))) > 0; i++) streak++;
+  let ys = 0, yd = 0, yc = 0, yu = 0;
+  for (const [d, r] of days) if (d.startsWith(year) && total(r) > 0) { ys += total(r); yc += cost(r); yu += unpriced(r); yd++; }
   const s30 = sumLast(30);
-  $("s-today").textContent = compact.format(total(days.get(today)));
+  const [c30, u30] = costLast(30);
+  const tr = days.get(today);
+  $("s-today").textContent = compact.format(total(tr));
   $("s-today-n").textContent = lastUpload() ? `last upload ${lastUpload()}` : "no data yet";
+  $("s-cost").textContent = usd(cost(tr)) + (unpriced(tr) ? "*" : "");
+  $("s-cost-n").textContent = `30 days ${usd(c30)}${u30 ? "*" : ""}`;
   $("s-30").textContent = compact.format(s30);
   $("s-30-n").textContent = `avg ${compact.format(s30 / 30)}/day`;
   $("s-year").textContent = compact.format(ys);
-  $("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"}`;
-  $("s-streak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
-  $("s-streak-n").textContent = nz.length ? `best day ${compact.format(nz[nz.length - 1])}` : " ";
+  $("s-year-n").textContent = `${yd} active day${yd === 1 ? "" : "s"} · ${usd(yc)}${yu ? "*" : ""}`;
   const hosts = Object.keys(state.meta.hosts || {}).sort();
   const machines = `${hosts.length} machine${hosts.length === 1 ? "" : "s"}${hosts.length ? ` (${hosts.join(", ")})` : ""}`;
   $("sub").textContent = days.size ? `${machines} · days in US Eastern time` : "No data yet. It appears after the first upload from a machine.";
+  const priceNote = `Costs are estimates at Claude API list prices${state.meta.prices_as_of ? ` (as of ${state.meta.prices_as_of})` : ""}, not what a subscription bills.`;
   $("foot").innerHTML = embedded
-    ? `${machines} · US Eastern days · <a href="https://toan-vt.github.io/token-usage/" target="_blank" rel="noopener">open full page</a>`
-    : "";
+    ? `${machines} · US Eastern days · <a href="https://toan-vt.github.io/token-usage/" target="_blank" rel="noopener">open full page</a><br>${priceNote}`
+    : priceNote;
 
   renderCalendar(nz, end, today);
   renderBars(end, today);
@@ -294,10 +318,10 @@ function renderBars(end, today) {
   });
   wrap.replaceChildren(svg);
 
-  let html = `<table><tr><th>Date</th><th>Total</th>${KEYS.map(([, l]) => `<th>${l}</th>`).join("")}</tr>`;
+  let html = `<table><tr><th>Date</th><th>Est. cost</th><th>Total</th>${KEYS.map(([, l]) => `<th>${l}</th>`).join("")}</tr>`;
   for (const d of [...list].reverse()) {
     const r = state.days.get(d);
-    html += `<tr><td>${short(d)}${d === today ? " (so far)" : ""}</td><td>${r ? full.format(total(r)) : "–"}</td>${KEYS.map(([k]) => `<td>${r ? full.format(r[k] || 0) : "–"}</td>`).join("")}</tr>`;
+    html += `<tr><td>${short(d)}${d === today ? " (so far)" : ""}</td><td>${r ? usd(cost(r)) + (unpriced(r) ? "*" : "") : "–"}</td><td>${r ? full.format(total(r)) : "–"}</td>${KEYS.map(([k]) => `<td>${r ? full.format(r[k] || 0) : "–"}</td>`).join("")}</tr>`;
   }
   $("table").innerHTML = html + "</table>";
 }

@@ -22,9 +22,8 @@ curl -fsSL "https://raw.githubusercontent.com/$REPO/main/push_usage.py" -o "$DIR
 chmod 700 "$DIR"
 
 TOKEN="${TU_TOKEN:-}"
-if [ -n "${TU_TOKEN+x}" ]; then
-  :  # token given via environment (may be empty = use gh); no prompt
-elif [ -f "$DIR/config.json" ]; then
+# An empty TU_TOKEN means "don't prompt"; it must not erase a token already saved on this machine.
+if [ -z "$TOKEN" ] && [ -f "$DIR/config.json" ]; then
   TOKEN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("token",""))' "$DIR/config.json")"
 fi
 if [ -z "$TOKEN" ] && [ -z "${TU_TOKEN+x}" ]; then
