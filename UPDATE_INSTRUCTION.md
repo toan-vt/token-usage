@@ -1,6 +1,9 @@
 # Update the token-usage uploader on this machine
 
-**For Claude Code:** this machine already uploads Claude Code usage to https://toan-vt.github.io/token-usage/. Update its uploader to **version 2**, which records usage per model so the dashboard can estimate cost. Follow the steps in order, then report the result.
+**For Claude Code:** this machine already uploads Claude Code usage to https://toan-vt.github.io/token-usage/. Update its uploader to the latest version, **version 3**. Follow the steps in order, then report the result.
+
+- Version 2 records usage per model, so the dashboard can estimate cost.
+- Version 3 makes every upload commit as `token-usage-bot (<machine>)` instead of the GitHub account whose token it uses, so uploads no longer count toward the user's contribution graph.
 
 What changes: only the script `~/.claude/token-usage/push_usage.py`. The hooks in `~/.claude/settings.json` call that same file, and `~/.claude/token-usage/config.json` (machine name, credentials) stays as it is.
 
@@ -19,7 +22,7 @@ ls ~/.claude/token-usage/push_usage.py
 grep -m1 '^VERSION = ' ~/.claude/token-usage/push_usage.py || echo "VERSION = 1 (no VERSION line)"
 python3 -c 'import json,os; print("machine:", json.load(open(os.path.expanduser("~/.claude/token-usage/config.json")))["host"])'
 ```
-Don't run the old script with `--version` to check: version 1 ignores unknown flags and does a normal upload instead. If it already says `VERSION = 2`, skip to step 3.
+Don't run the old script with `--version` to check: version 1 ignores unknown flags and does a normal upload instead. If it already says `VERSION = 3`, skip to step 3.
 
 ### 2. Replace the script
 The new file is downloaded next to the old one, checked, and only then swapped in, so a failed download never breaks the hooks:
@@ -30,7 +33,7 @@ cd ~/.claude/token-usage \
   && mv push_usage.py.new push_usage.py \
   && python3 push_usage.py --version
 ```
-Expected: `token-usage uploader version 2`. If it still prints version 1 or fails on `--version`, GitHub's file cache may be stale for a few minutes after an update. Wait 5 minutes and run this step again.
+Expected: `token-usage uploader version 3`. If it prints an older version or fails on `--version`, GitHub's file cache may be stale for a few minutes after an update. Wait 5 minutes and run this step again.
 
 `python3` must be the same one the hooks use. If the hooks call an absolute path (check with `grep push_usage ~/.claude/settings.json`), use that interpreter in steps 2–4.
 
@@ -54,7 +57,14 @@ Check that the repo now has a version 2 file for this machine (replace `<machine
 curl -s https://api.github.com/repos/toan-vt/token-usage/contents/data/hosts/<machine>.json \
   | python3 -c 'import json,sys,base64; d=json.loads(base64.b64decode(json.load(sys.stdin)["content"])); print("version", d.get("version", 1), "updated", d["updated_at"])'
 ```
-Expected: `version 2` and an `updated` time from the last few minutes (UTC).
+Expected: `version 2` (the data file format) and an `updated` time from the last few minutes (UTC).
+
+Then check that the upload was committed by the bot, not a person's account:
+```bash
+curl -s "https://api.github.com/repos/toan-vt/token-usage/commits?path=data/hosts/<machine>.json&per_page=1" \
+  | python3 -c 'import json,sys; c=json.load(sys.stdin)[0]; print("author:", c["commit"]["author"]["name"], "| linked account:", (c.get("author") or {}).get("login", "none"))'
+```
+Expected: `author: token-usage-bot (<machine>) | linked account: none`. If step 4 said `unchanged`, no new commit was made yet. The next upload with new usage will use the bot identity.
 
 About 2 minutes later the dashboard rebuilds. Its "Unknown model" (unpriced) usage for this machine's days should be gone, apart from days whose logs are no longer on disk.
 

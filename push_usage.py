@@ -50,7 +50,15 @@ LOCK = os.path.join(APP_DIR, ".lock")
 LOG = os.path.join(APP_DIR, "last.log")
 PROJECTS = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", os.path.join(HOME, ".claude")), "projects")
 THROTTLE = {"stop": 30 * 60, "end": 5 * 60}
-VERSION = 2
+VERSION = 3  # uploader version (3: commits as a bot identity, never as the token owner)
+FORMAT = 2   # data file format version (see docstring)
+# Commit identity for every upload. The reserved .invalid domain can never be verified by a
+# GitHub account, so these commits never count toward anyone's contribution graph.
+BOT_EMAIL = "token-usage-bot@noreply.invalid"
+
+
+def bot_name(cfg):
+    return "token-usage-bot (%s)" % cfg["host"]
 N = 6  # [input, output, cache_write_5m, cache_write_1h, cache_read, web_searches]
 
 
@@ -180,7 +188,7 @@ def merged_doc(cfg, old, hours):
     if merged == old:
         return None, len(merged)
     doc = {"host": cfg["host"], "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-           "version": VERSION, "hours": {h: merged[h] for h in sorted(merged)}}
+           "version": FORMAT, "hours": {h: merged[h] for h in sorted(merged)}}
     return json.dumps(doc, separators=(",", ":")).encode(), len(merged)
 
 
@@ -198,7 +206,10 @@ def upload_api(cfg, hours):
     content, n = merged_doc(cfg, old, hours)
     if content is None:
         return "unchanged"
-    body = {"message": "usage: %s" % cfg["host"], "content": base64.b64encode(content).decode()}
+    # Without author/committer, the API credits the commit to the token's owner (your account).
+    ident = {"name": bot_name(cfg), "email": BOT_EMAIL}
+    body = {"message": "usage: %s" % cfg["host"], "content": base64.b64encode(content).decode(),
+            "author": ident, "committer": ident}
     if sha:
         body["sha"] = sha
     gh_request(cfg, "PUT", path, body)
@@ -221,7 +232,7 @@ def upload_git(cfg, hours):
     if not os.path.isdir(os.path.join(repo, ".git")):
         git(["clone", "--quiet", "--depth", "1", "--branch", "main", url, repo])
     path = os.path.join(repo, "data", "hosts", "%s.json" % cfg["host"])
-    ident = ["-c", "user.name=token-usage (%s)" % cfg["host"], "-c", "user.email=token-usage@users.noreply.github.com"]
+    ident = ["-c", "user.name=" + bot_name(cfg), "-c", "user.email=" + BOT_EMAIL]
     for attempt in range(4):  # another machine may push in between; its files never overlap ours
         git(["fetch", "--quiet", "--depth", "1", "origin", "main"], cwd=repo)
         git(["reset", "--quiet", "--hard", "FETCH_HEAD"], cwd=repo)
@@ -310,7 +321,7 @@ def main(argv):
         print("by model:")
         for mkey in sorted(models, key=models.get, reverse=True):
             print("  %-32s %15s tokens" % (mkey, "{:,}".format(models[mkey])))
-        print("%d unique messages, %d hours, version %d, host: %s" % (n, len(hours), VERSION, load_config()["host"]))
+        print("%d unique messages, %d hours, uploader version %d, host: %s" % (n, len(hours), VERSION, load_config()["host"]))
         return 0
     try:
         result = run()

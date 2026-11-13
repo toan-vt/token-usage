@@ -16,6 +16,7 @@ GitHub Actions on every push: build.py merges all machines, applies prices.json
 ```
 
 - Each machine writes only its own file, so machines never conflict, and re-uploading never double-counts.
+- Uploads are committed as `token-usage-bot (<machine>)` with an email no GitHub account can claim, so they never count toward anyone's contribution graph, even when the machine uploads with your own token.
 - Totals are exact: they come from the per-message `usage` that Claude Code logs.
 - **Cost is an estimate at Claude API list prices** (`prices.json`, from the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing)), not what a subscription bills. It accounts for 5-minute vs 1-hour cache writes, each model's cache-read rate, Haiku 5.5's higher rate for prompts over 100K tokens, fast mode, US-only inference (1.1×), and web searches ($10 per 1,000). When prices change, edit `prices.json` only; machines don't need updating. Usage from models not in `prices.json`, or from machines still on uploader version 1 (no model info), shows as "unpriced" (marked `*`).
 - Nothing is lost when offline. The next upload recomputes from the local logs.
@@ -52,7 +53,7 @@ Requirements: `python3` ≥ 3.6 and access to github.com over HTTPS (token) or S
 
 ## Update a machine
 
-When the uploader changes (check with `python3 ~/.claude/token-usage/push_usage.py --version`; current is **version 2**), start Claude Code on that machine and paste:
+When the uploader changes (check with `python3 ~/.claude/token-usage/push_usage.py --version`; current is **version 3**), start Claude Code on that machine and paste:
 
 ```
 Follow https://raw.githubusercontent.com/toan-vt/token-usage/main/UPDATE_INSTRUCTION.md to update this machine
